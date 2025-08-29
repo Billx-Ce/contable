@@ -224,7 +224,7 @@ const hasActiveFilters = computed(() =>
                         title="Editar"
                       >
                         <i class="fas fa-edit text-sm"></i>
-                      </Link>
+                      </Link>cle
 
                       <button
                         @click="confirmDelete(persona)"
