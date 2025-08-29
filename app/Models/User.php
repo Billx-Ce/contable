@@ -9,8 +9,16 @@ use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    
     use HasFactory, Notifiable;
+
+    //relacion de persona con usuarios
+    // Si en tu tabla pusiste 'nombre' en lugar de 'name', usa:
+    // protected $fillable = ['nombre', 'email', 'password', 'persona_id'];
+    public function persona()
+    {
+        return $this->belongsTo(Persona::class);
+    }
 
     /**
      * The attributes that are mass assignable.
@@ -21,6 +29,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'persona_id',
     ];
 
     /**
