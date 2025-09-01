@@ -8,8 +8,8 @@ const props = defineProps({
   persona: { type: Object, required: true },
   // { ubigeo_dep, ubigeo_pro, ubigeo_com }
   initialData: { type: Object, default: () => null },
-  // { tiposDocumento:[{value,text}], departamentos:[{ubigeo_dep,text}], sexos:[{value,text}], discapacidades:[{id,text}] }
-  options: { type: Object, default: () => ({ tiposDocumento: [], departamentos: [], sexos: [], discapacidades: [] }) }
+  // { tiposDocumento:[{value,text}], departamentos:[{ubigeo_dep,text}], sexos:[{value,text}], discapacidads:[{id,text}] }
+  options: { type: Object, default: () => ({ tiposDocumento: [], departamentos: [], sexos: [], discapacidads: [] }) }
 })
 
 /* ---------- Utilidades de fecha ---------- */
@@ -62,31 +62,126 @@ const edad = computed(() => {
   return e
 })
 
+/* =========================
+   Teléfono: 9 dígitos crudos
+========================= */
+const telefonoError  = ref('')
+const telefonoDigits = ref('')
+
+const telefonoModel = computed({
+  get() {
+    return telefonoDigits.value
+  },
+  set(v) {
+    const digits = (v || '').replace(/\D/g, '').slice(0, 9)
+    telefonoDigits.value = digits
+    form.telefono = digits
+    telefonoError.value = digits && digits.length !== 9
+      ? 'El teléfono debe tener exactamente 9 dígitos'
+      : ''
+  }
+})
+
+/* precargar teléfono del registro */
+onMounted(() => {
+  telefonoModel.value = (props.persona.telefono || '').replace(/\D/g, '').slice(0, 9)
+})
+
+/* =========================
+   Documento: límite duro + validación
+========================= */
+const documentoError = ref('')
+
+const docMaxLen = computed(() => {
+  switch (form.tipo_doc) {
+    case 'DNI':       return 8          // 8 exactos
+    case 'CE':        return 12         // 9–12, techo 12
+    case 'Pasaporte': return 12         // 6–12, techo 12
+    default:          return 12
+  }
+})
+
+/* Texto de ayuda dinámico bajo el input */
+const docHelp = computed(() => {
+  switch (form.tipo_doc) {
+    case 'DNI':       return '8 dígitos exactos'
+    case 'CE':        return '9–12 dígitos'
+    case 'Pasaporte': return '6–12 caracteres (letras y números)'
+    default:          return ''
+  }
+})
+
+const handleDocInput = (e) => {
+  let v = e.target.value ?? ''
+  if (form.tipo_doc === 'Pasaporte') {
+    v = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, docMaxLen.value)
+  } else {
+    v = v.replace(/\D/g, '').slice(0, docMaxLen.value)
+  }
+  if (v !== form.num_doc) form.num_doc = v
+}
+
+// Bloquea tecleo adicional (permite borrar/navegar/pegar con selección)
+const allowDocKeydown = (e) => {
+  const editingKeys = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End']
+  if (editingKeys.includes(e.key) || e.ctrlKey || e.metaKey) return
+  const el = e.target
+  const hasSelection = el.selectionStart !== el.selectionEnd
+  if ((form.num_doc?.length || 0) >= docMaxLen.value && !hasSelection) {
+    e.preventDefault()
+  }
+}
+
+watch([() => form.tipo_doc, () => form.num_doc], ([tipo, documento]) => {
+  if (!tipo || !documento) {
+    documentoError.value = ''
+    return
+  }
+  const soloNumeros = documento.replace(/\D/g, '')
+  switch (tipo) {
+    case 'DNI':
+      documentoError.value = soloNumeros.length === 8 ? '' : 'El DNI debe tener exactamente 8 dígitos'
+      break
+    case 'CE':
+      documentoError.value = (soloNumeros.length >= 9 && soloNumeros.length <= 12)
+        ? '' : 'El Carné de Extranjería debe tener entre 9 y 12 dígitos'
+      break
+    case 'Pasaporte':
+      documentoError.value = (documento.length >= 6 && documento.length <= 12)
+        ? '' : 'El Pasaporte debe tener entre 6 y 12 caracteres'
+      break
+    default:
+      documentoError.value = ''
+  }
+})
+
+watch(() => form.tipo_doc, () => {
+  form.num_doc = ''
+  documentoError.value = ''
+})
+
 /* ---------- Fetch helpers ---------- */
 const fetchProvincias = async (ubigeoDep) => {
-  provincias.value = [];
-  distritos.value = [];
-  if (!ubigeoDep) return;
+  provincias.value = []
+  distritos.value = []
+  if (!ubigeoDep) return
   try {
-    if (typeof route !== 'function') {
-      console.error("La función 'route' no está disponible.");
-      return;
-    }
-    const url = route('personas.provincias', ubigeoDep);
-    const res = await fetch(url);
-    provincias.value = await res.json();
+    const url = (typeof route === 'function')
+      ? route('personas.provincias', { ubigeoDep })
+      : `/personas/provincias/${ubigeoDep}`
+    const res = await fetch(url)
+    provincias.value = await res.json()
   } catch (e) {
-    console.error('Error fetchProvincias', e);
+    console.error('Error fetchProvincias', e)
   }
-};
-
+}
 
 const fetchDistritos = async (ubigeoPro) => {
   distritos.value = []
   if (!ubigeoPro) return
   try {
     const url = (typeof route === 'function')
-      ? route('personas.distritos', ubigeoPro)
+      ? route('personas.distritos', { ubigeoPro })
       : `/personas/distritos/${ubigeoPro}`
     const res = await fetch(url)
     distritos.value = await res.json()
@@ -114,24 +209,20 @@ watch(selProv, async (val) => {
 watch(selDist, (val) => { form.ubigeo_com = val })
 
 /* ---------- Submit ---------- */
-// En Edit.vue
 const submit = () => {
-  if (!props.persona?.id) {
-    console.error("El ID de la persona no está definido.");
-    return;
-  }
-  form.fecha_nac = toYYYYMMDD(form.fecha_nac);
+  if (!props.persona?.id) return
+  if (documentoError.value || telefonoError.value) return
+
+  form.fecha_nac = toYYYYMMDD(form.fecha_nac)
   form.put(route('personas.update', props.persona.id), {
     preserveScroll: true,
     onSuccess: () => {
-      router.visit(route('personas.index'), { replace: true, preserveState: false });
+      router.visit(route('personas.index'), { replace: true, preserveState: false })
     }
-  });
-};
-
+  })
+}
 
 const resetForm = () => form.reset()
-
 </script>
 
 <template>
@@ -143,7 +234,7 @@ const resetForm = () => form.reset()
     <div class="py-10">
       <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="bg-white rounded-lg shadow p-6">
-          <form @submit.prevent="submit" class="space-y-8">
+          <form @submit.prevent="submit" class="space-y-8" autocomplete="off">
 
             <!-- Datos personales -->
             <section>
@@ -202,10 +293,19 @@ const resetForm = () => form.reset()
 
                 <div>
                   <label class="block text-sm font-medium mb-1">Número de documento *</label>
-                  <input v-model="form.num_doc" type="text"
-                         class="w-full px-3 py-2 border rounded-md"
-                         :class="{'border-red-500': form.errors.num_doc}" required>
-                  <p v-if="form.errors.num_doc" class="text-red-600 text-sm mt-1">{{ form.errors.num_doc }}</p>
+                  <input
+                    v-model="form.num_doc"
+                    @input="handleDocInput"
+                    @keydown="allowDocKeydown"
+                    :maxlength="docMaxLen"
+                    :inputmode="form.tipo_doc === 'Pasaporte' ? 'text' : 'numeric'"
+                    class="w-full px-3 py-2 border rounded-md"
+                    :class="{'border-red-500': form.errors.num_doc || documentoError}"
+                    required
+                  >
+                  <p v-if="documentoError" class="text-red-600 text-sm mt-1">{{ documentoError }}</p>
+                  <p v-else-if="form.errors.num_doc" class="text-red-600 text-sm mt-1">{{ form.errors.num_doc }}</p>
+                  <p v-else-if="form.tipo_doc" class="text-xs text-gray-500 mt-1">{{ docHelp }}</p>
                 </div>
               </div>
             </section>
@@ -268,8 +368,8 @@ const resetForm = () => form.reset()
                   <select v-model="form.discapacidad_id"
                           class="w-full px-3 py-2 border rounded-md"
                           :class="{'border-red-500': form.errors.discapacidad_id}">
-                  
-                    <option v-for="d in options.discapacidades" :key="d.id" :value="d.id">
+                    <option :value="null">Ninguna</option>
+                    <option v-for="d in options.discapacidads" :key="d.id" :value="d.id">
                       {{ d.text }}
                     </option>
                   </select>
@@ -284,12 +384,21 @@ const resetForm = () => form.reset()
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label class="block text-sm font-medium mb-1">Teléfono</label>
-                  <input v-model="form.telefono" type="tel"
-                         class="w-full px-3 py-2 border rounded-md"
-                         :class="{'border-red-500': form.errors.telefono}">
-                  <p v-if="form.errors.telefono" class="text-red-600 text-sm mt-1">{{ form.errors.telefono }}</p>
+                  <input
+                    v-model="telefonoModel"
+                    type="tel"
+                    inputmode="numeric"
+                    pattern="\d{9}"
+                    autocomplete="off"
+                    placeholder="9 dígitos (ej: 987654321)"
+                    @keydown.enter.prevent
+                    :maxlength="9"
+                    class="w-full px-3 py-2 border rounded-md"
+                    :class="{'border-red-500': form.errors.telefono || telefonoError}"
+                  >
+                  <p v-if="telefonoError" class="text-red-600 text-sm mt-1">{{ telefonoError }}</p>
+                  <p v-else-if="form.errors.telefono" class="text-red-600 text-sm mt-1">{{ form.errors.telefono }}</p>
                 </div>
-                
               </div>
             </section>
 

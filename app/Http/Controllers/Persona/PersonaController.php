@@ -103,7 +103,7 @@ class PersonaController extends Controller
                 ['value' => 'M', 'text' => 'Masculino'],
                 ['value' => 'F', 'text' => 'Femenino'],
             ],
-            'discapacidades' => Discapacidad::orderBy('nombre_discapacidad')
+            'discapacidads' => Discapacidad::orderBy('id')  // ← CAMBIO AQUÍ
                 ->get(['id', 'nombre_discapacidad as text']),
         ]);
     }
@@ -131,7 +131,7 @@ class PersonaController extends Controller
             ],
             'ubigeo_com'      => 'required|exists:distritos,ubigeo_com',
             'sexo'            => 'required|in:M,F',
-            'discapacidad_id' => 'nullable|exists:discapacidades,id', // corregido
+            'discapacidad_id' => 'nullable|exists:discapacidads,id', // corregido
             'fecha_nac'       => 'required|date|before_or_equal:today',
             'direccion'       => 'nullable|string|max:255',
             'telefono'        => 'nullable|string|max:20',
@@ -192,7 +192,7 @@ class PersonaController extends Controller
                     ['value' => 'M', 'text' => 'Masculino'],
                     ['value' => 'F', 'text' => 'Femenino'],
                 ],
-                'discapacidades' => Discapacidad::orderBy('nombre_discapacidad')
+                'discapacidads' => Discapacidad::orderBy('id')  // ← CAMBIO AQUÍ
                     ->get(['id', 'nombre_discapacidad as text']),
             ],
         ]);
@@ -221,7 +221,7 @@ class PersonaController extends Controller
             ],
             'ubigeo_com'      => 'required|exists:distritos,ubigeo_com',
             'sexo'            => 'required|in:M,F',
-            'discapacidad_id' => 'nullable|exists:discapacidades,id', // corregido
+            'discapacidad_id' => 'nullable|exists:discapacidads,id', // corregido
             'fecha_nac'       => 'required|date|before_or_equal:today',
             'direccion'       => 'nullable|string|max:255',
             'telefono'        => 'nullable|string|max:20',
