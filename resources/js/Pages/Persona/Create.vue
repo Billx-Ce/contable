@@ -2,6 +2,7 @@
 import { Link, useForm, router } from '@inertiajs/vue3'
 import { ref, computed, watch } from 'vue'
 import AppLayout from '@/Layouts/AuthenticatedLayout.vue'
+import Swal from 'sweetalert2'
 
 const props = defineProps({
   tiposDocumento: { type: Array, default: () => [] },
@@ -184,17 +185,27 @@ const puedeEnviar = computed(() =>
 )
 
 const submit = () => {
-  if (documentoError.value || telefonoError.value) return
-  // Nota: form.telefono ya son solo 9 dígitos (o vacío)
-
-  form.post(route('personas.store'), {
-    onSuccess: () => {
-      form.reset()
-      telefonoDigits.value = ''
-      router.visit(route('personas.index'))
-    },
-    onError: (errors) => {
-      console.error('Error al crear la persona:', errors)
+  Swal.fire({
+    title: '¿Deseas guardar esta persona?',
+    text: 'Confirma que los datos son correctos.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, guardar',
+    cancelButtonText: 'Cancelar',
+  }).then((result) => {
+    if (result.isConfirmed) {
+      form.post(route('personas.store'), {
+        onStart: () => Swal.showLoading(),
+        onSuccess: () =>
+          Swal.fire({ icon: 'success', title: 'Guardado', timer: 1500, showConfirmButton: false }),
+        onError: (errors) => {
+          if (errors.num_doc) {
+            Swal.fire({ icon: 'error', title: 'Número de documento duplicado', text: errors.num_doc })
+          } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Verifica los campos del formulario.' })
+          }
+        },
+      })
     }
   })
 }

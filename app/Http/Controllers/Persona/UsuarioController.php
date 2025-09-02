@@ -17,7 +17,9 @@ class UsuarioController extends Controller
         {
         $users = User::with('persona:id,nombre')
             ->select('id','name','email','persona_id')
+            ->orderBy('id')
             ->paginate(10)
+            ->withQueryString()
             ->through(fn ($u) => [
                 'id'      => $u->id,
                 'name'    => $u->name,

@@ -17,7 +17,7 @@ class User extends Authenticatable
     // protected $fillable = ['nombre', 'email', 'password', 'persona_id'];
     public function persona()
     {
-        return $this->belongsTo(Persona::class);
+        return $this->belongsTo(Persona::class, 'persona_id');
     }
 
     /**

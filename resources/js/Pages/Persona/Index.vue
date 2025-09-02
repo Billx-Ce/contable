@@ -4,8 +4,17 @@ import { Link, router } from '@inertiajs/vue3'
 import { ref, watch, computed } from 'vue'
 import AppLayout from '@/Layouts/AuthenticatedLayout.vue'
 import Pagination from '@/Components/Pagination.vue'
+import Swal from 'sweetalert2'
 
-
+// Heroicons (solid)
+import {
+  PlusIcon,
+  XMarkIcon,
+  PhoneIcon,
+  EyeIcon,
+  PencilSquareIcon,
+  TrashIcon,
+} from '@heroicons/vue/24/solid'
 
 const props = defineProps({
   personas: { type: Object, required: true },
@@ -16,15 +25,13 @@ const props = defineProps({
 // Filtros de búsqueda
 const filters = ref({
   search:    props.filters.search    || '',
-  tipo_doc:  props.filters.tipo_doc  || '',
-  ubigeo_id: props.filters.ubigeo_id || ''
+  tipo_doc:  props.filters.tipo_doc  || ''
 })
 
-// Estado del modal
+// Modal
 const showModal = ref(false)
 const selectedPerson = ref(null)
 
-// Formateo del sexo
 const formatSexo = (sexo) => {
   switch (sexo) {
     case 'M': return 'Masculino'
@@ -33,26 +40,57 @@ const formatSexo = (sexo) => {
   }
 }
 
-// Abrir / cerrar modal (clonar para evitar referencias “stale”)
 const openModal = (persona) => {
-  selectedPerson.value = JSON.parse(JSON.stringify(persona)) // copia plana
+  selectedPerson.value = JSON.parse(JSON.stringify(persona))
   showModal.value = true
 }
 const closeModal = () => { showModal.value = false; selectedPerson.value = null }
 
-// Buscar (rehidratar props nuevas)
+// Buscar
 const search = () => {
   router.get(route('personas.index'), filters.value, {
-    preserveState: false, // <- clave para traer datos frescos
-    replace: true
+    preserveState: true,
+    replace: true,
+    only: ['personas'],
   })
 }
 
 // Eliminar
 const confirmDelete = (persona) => {
-  if (confirm(`¿Estás seguro de eliminar a ${persona.nombre_completo}?`)) {
-    router.delete(route('personas.destroy', persona.id))
-  }
+  const nombre = persona?.nombre_completo ?? 'esta persona'
+
+  Swal.fire({
+    title: '¿Eliminar a ' + nombre + '?',
+    text: 'Esta acción no se puede deshacer.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar',
+    reverseButtons: true,
+  }).then((result) => {
+    if (!result.isConfirmed) return
+
+    router.delete(route('personas.destroy', persona.id), {
+      preserveScroll: true,
+      onStart: () => Swal.showLoading(),
+      onSuccess: () => {
+        Swal.fire({
+          icon: 'success',
+          title: 'Eliminado',
+          text: 'La persona fue eliminada correctamente.',
+          timer: 1500,
+          showConfirmButton: false,
+        })
+      },
+      onError: () => {
+        Swal.fire({
+          icon: 'error',
+          title: 'No se pudo eliminar',
+          text: 'Revisa dependencias o permisos.',
+        })
+      },
+    })
+  })
 }
 
 // Limpiar filtros
@@ -60,14 +98,13 @@ const clearFilters = () => {
   filters.value = { search: '', tipo_doc: '', ubigeo_id: '' }
 }
 
-// Debounce para filtros
+// Debounce
 let searchTimeout = null
 watch(filters, () => {
   if (searchTimeout) clearTimeout(searchTimeout)
   searchTimeout = setTimeout(search, 300)
 }, { deep: true })
 
-// ¿Hay filtros activos?
 const hasActiveFilters = computed(() =>
   !!(filters.value.search || filters.value.tipo_doc || filters.value.ubigeo_id)
 )
@@ -84,7 +121,6 @@ const hasActiveFilters = computed(() =>
     <div class="py-12">
       <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
         <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg p-6">
-
           <!-- Encabezado -->
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <div>
@@ -97,7 +133,8 @@ const hasActiveFilters = computed(() =>
               :href="route('personas.create')"
               class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md shadow hover:bg-blue-700 transition"
             >
-              <i class="fas fa-plus mr-2"></i> Nueva Persona
+              <PlusIcon class="w-5 h-5 mr-2" />
+              Nueva Persona
             </Link>
           </div>
 
@@ -127,30 +164,14 @@ const hasActiveFilters = computed(() =>
                 </select>
               </div>
 
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
-                <select
-                  v-model="filters.ubigeo_id"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Todas</option>
-                  <option
-                    v-for="ubigeo in ubigeos"
-                    :key="ubigeo.codigo"
-                    :value="ubigeo.codigo"
-                  >
-                    {{ ubigeo.departamento }} - {{ ubigeo.provincia }} - {{ ubigeo.distrito }}
-                  </option>
-                </select>
-              </div>
-
               <div class="flex items-end">
                 <button
                   v-if="hasActiveFilters"
                   @click="clearFilters"
-                  class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition"
+                  class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition"
                 >
-                  <i class="fas fa-times mr-2"></i>Limpiar
+                  <XMarkIcon class="w-5 h-5" />
+                  Limpiar
                 </button>
               </div>
             </div>
@@ -161,19 +182,27 @@ const hasActiveFilters = computed(() =>
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre y Edad</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacto</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
+
               <tbody class="bg-white divide-y divide-gray-200">
                 <tr
                   v-for="persona in personas.data"
                   :key="persona.id"
                   class="hover:bg-gray-50 transition-colors"
                 >
+                  <!-- Nombre y edad -->
+                  <td class="px-6 py-4">
+                    <div class="text-sm font-medium text-gray-900">{{ persona.nombre_completo }}</div>
+                    <div class="text-sm text-gray-500">{{ persona.fecha_y_edad }}</div>
+                  </td>
+
+                  <!-- Documento -->
                   <td class="px-6 py-4">
                     <div class="text-sm font-medium text-gray-900">
                       {{ persona.tipo_doc }}: {{ persona.num_doc }}
@@ -183,11 +212,7 @@ const hasActiveFilters = computed(() =>
                     </div>
                   </td>
 
-                  <td class="px-6 py-4">
-                    <div class="text-sm font-medium text-gray-900">{{ persona.nombre_completo }}</div>
-                    <div class="text-sm text-gray-500">{{ persona.fecha_y_edad }}</div>
-                  </td>
-
+                  <!-- Ubicación -->
                   <td class="px-6 py-4">
                     <div v-if="persona.ubigeo" class="text-sm text-gray-900">
                       {{ persona.ubigeo.departamento }}
@@ -198,40 +223,45 @@ const hasActiveFilters = computed(() =>
                     <div v-else class="text-sm text-gray-400">Sin ubicación</div>
                   </td>
 
+                  <!-- Contacto -->
                   <td class="px-6 py-4">
-                    <div v-if="persona.telefono" class="text-sm text-gray-900">
-                      <i class="fas fa-phone text-xs mr-1"></i>{{ persona.telefono }}
+                    <div v-if="persona.telefono" class="flex items-center text-sm text-gray-900">
+                      <PhoneIcon class="w-4 h-4 mr-1" />
+                      {{ persona.telefono }}
                     </div>
                     <div v-if="!persona.telefono && !persona.email" class="text-sm text-gray-400">
                       Sin contacto
                     </div>
-
                   </td>
 
+                  <!-- Acciones -->
                   <td class="px-6 py-4">
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center gap-2">
                       <button
                         @click="openModal(persona)"
                         class="p-2 text-green-600 hover:text-white hover:bg-green-600 rounded-full transition"
                         title="Ver"
+                        aria-label="Ver"
                       >
-                        <i class="fas fa-eye text-sm"></i>
+                        <EyeIcon class="w-5 h-5" />
                       </button>
 
                       <Link
                         :href="route('personas.edit', persona.id)"
                         class="p-2 text-blue-600 hover:text-white hover:bg-blue-600 rounded-full transition"
                         title="Editar"
+                        aria-label="Editar"
                       >
-                        <i class="fas fa-edit text-sm"></i>
-                      </Link>cle
+                        <PencilSquareIcon class="w-5 h-5" />
+                      </Link>
 
                       <button
                         @click="confirmDelete(persona)"
                         class="p-2 text-red-600 hover:text-white hover:bg-red-600 rounded-full transition"
                         title="Eliminar"
+                        aria-label="Eliminar"
                       >
-                        <i class="fas fa-trash-alt text-sm"></i>
+                        <TrashIcon class="w-5 h-5" />
                       </button>
                     </div>
                   </td>
@@ -255,10 +285,9 @@ const hasActiveFilters = computed(() =>
               :total="personas.total"
             />
           </div>
-        </div> 
-      </div>   
-    </div>     
-
+        </div>
+      </div>
+    </div>
 
     <!-- Modal Detalle -->
     <teleport to="body">
@@ -275,7 +304,7 @@ const hasActiveFilters = computed(() =>
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-xl font-bold text-gray-900">Detalles de Persona</h3>
               <button @click="closeModal" class="text-gray-500 hover:text-gray-700" aria-label="Cerrar">
-                <i class="fas fa-times text-lg"></i>
+                <XMarkIcon class="w-6 h-6" />
               </button>
             </div>
 
@@ -337,11 +366,10 @@ const hasActiveFilters = computed(() =>
                     <p class="text-sm text-gray-500">Teléfono</p>
                     <p class="font-medium">{{ selectedPerson.telefono || 'N/A' }}</p>
                   </div>
-                  
                 </div>
               </div>
 
-              <!-- Discapacidad (siempre muestra, con fallback) -->
+              <!-- Discapacidad -->
               <div>
                 <h4 class="text-lg font-semibold text-gray-800 mb-2">Discapacidad</h4>
                 <p class="font-medium">

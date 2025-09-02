@@ -3,6 +3,7 @@
 import { Link, useForm, router } from '@inertiajs/vue3'
 import { ref, watch, onMounted, computed } from 'vue'
 import AppLayout from '@/Layouts/AuthenticatedLayout.vue'
+import Swal from 'sweetalert2'
 
 const props = defineProps({
   persona: { type: Object, required: true },
@@ -209,18 +210,34 @@ watch(selProv, async (val) => {
 watch(selDist, (val) => { form.ubigeo_com = val })
 
 /* ---------- Submit ---------- */
-const submit = () => {
-  if (!props.persona?.id) return
-  if (documentoError.value || telefonoError.value) return
-
-  form.fecha_nac = toYYYYMMDD(form.fecha_nac)
-  form.put(route('personas.update', props.persona.id), {
-    preserveScroll: true,
-    onSuccess: () => {
-      router.visit(route('personas.index'), { replace: true, preserveState: false })
-    }
+function submit () {
+  Swal.fire({
+    title: '¿Deseas actualizar esta persona?',
+    text: 'Confirma que los datos son correctos.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, actualizar',
+    cancelButtonText: 'Cancelar',
+  }).then((r) => {
+    if (!r.isConfirmed) return
+    form.put(route('personas.update', props.persona.id), {
+      onStart: () => {
+        Swal.fire({ title: 'Actualizando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+      },
+      onSuccess: () => {
+        Swal.fire({ icon: 'success', title: 'Actualizado', timer: 1500, showConfirmButton: false })
+      },
+      onError: (errors) => {
+        if (errors.num_doc) {
+          Swal.fire({ icon: 'error', title: 'Número de documento duplicado', text: errors.num_doc })
+        } else {
+          Swal.fire({ icon: 'error', title: 'Error', text: 'Revisa los campos del formulario.' })
+        }
+      },
+    })
   })
 }
+
 
 const resetForm = () => form.reset()
 </script>

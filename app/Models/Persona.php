@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User;
 
 class Persona extends Model
 {
@@ -43,7 +44,7 @@ class Persona extends Model
     // 1 a 1: una persona tiene un usuario
     public function user()
     {
-        return $this->hasOne(User::class); // FK: users.persona_id
+        return $this->hasOne(User::class, 'persona_id'); // FK: users.persona_id
     }
     /* ======================
        RELACIONES

@@ -11,21 +11,21 @@ use App\Models\Discapacidad;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
+// ➕ AÑADIR:
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+
 class PersonaController extends Controller
 {
-    /**
-     * Listado con filtros y relación User
-     */
     public function index(Request $request)
     {
         $query = Persona::query()
             ->with([
-                'user:id,name,email,persona_id',          // relación 1:1 Persona → User
+                'user:id,name,email,persona_id',
                 'distrito.provincia.departamento',
                 'discapacidad',
             ]);
 
-        // Filtro de búsqueda
         if ($request->filled('search')) {
             $s = $request->search;
             $query->where(function ($q) use ($s) {
@@ -36,20 +36,16 @@ class PersonaController extends Controller
             });
         }
 
-        // Filtro por tipo de documento
         if ($request->filled('tipo_doc')) {
             $query->where('tipo_doc', $request->tipo_doc);
         }
 
-        // Filtro por ubigeo (código distrito)
         if ($request->filled('ubigeo_id')) {
             $query->where('ubigeo_com', $request->ubigeo_id);
         }
 
-        // Paginación conservando query string (filtros/búsqueda)
         $personas = $query->latest()->paginate(10)->withQueryString();
 
-        // Transformación para la vista (ubigeo + usuario resumido)
         $personas->getCollection()->transform(function ($p) {
             $p->ubigeo = $p->distrito ? [
                 'departamento' => $p->distrito->provincia->departamento->nombre ?? 'N/A',
@@ -63,11 +59,10 @@ class PersonaController extends Controller
                 'email' => $p->user->email,
             ] : null;
 
-            unset($p->user); // opcional: no enviar el objeto completo
+            unset($p->user);
             return $p;
         });
 
-        // Catálogo de ubigeos para el filtro
         $ubigeos = Distrito::with('provincia.departamento')
             ->orderBy('nombre')
             ->get()
@@ -85,9 +80,6 @@ class PersonaController extends Controller
         ]);
     }
 
-    /**
-     * Formulario de creación
-     */
     public function create()
     {
         return Inertia::render('Persona/Create', [
@@ -103,14 +95,11 @@ class PersonaController extends Controller
                 ['value' => 'M', 'text' => 'Masculino'],
                 ['value' => 'F', 'text' => 'Femenino'],
             ],
-            'discapacidads' => Discapacidad::orderBy('id')  // ← CAMBIO AQUÍ
+            'discapacidads' => Discapacidad::orderBy('id')
                 ->get(['id', 'nombre_discapacidad as text']),
         ]);
     }
 
-    /**
-     * Guardar persona
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -131,21 +120,39 @@ class PersonaController extends Controller
             ],
             'ubigeo_com'      => 'required|exists:distritos,ubigeo_com',
             'sexo'            => 'required|in:M,F',
-            'discapacidad_id' => 'nullable|exists:discapacidads,id', // corregido
+            'discapacidad_id' => 'nullable|exists:discapacidads,id',
             'fecha_nac'       => 'required|date|before_or_equal:today',
             'direccion'       => 'nullable|string|max:255',
-            'telefono'        => 'nullable|string|max:20',
+            'telefono'        => 'nullable|string|max:9',
         ]);
 
-        Persona::create($validated);
+        // 1) Crear PERSONA
+        $persona = Persona::create($validated);
+
+        // 2) ➕ Crear USUARIO automático si hay DNI
+        if ($persona->tipo_doc === 'DNI' && !empty($persona->num_doc)) {
+            $base = "{$persona->num_doc}@gmail.com";
+            $email = $base;
+            $i = 1;
+            // Evitar choque si ya existe ese email
+            while (User::where('email', $email)->exists()) {
+                $email = "{$persona->num_doc}+{$i}@gmail.com";
+                $i++;
+            }
+
+            $nombreCompleto = trim("{$persona->nombre} {$persona->pri_ape} {$persona->seg_ape}");
+
+            $persona->user()->create([
+                'name'     => $nombreCompleto ?: $persona->num_doc,
+                'email'    => $email,
+                'password' => Hash::make($persona->num_doc), // contraseña = DNI
+            ]);
+        }
 
         return redirect()->route('personas.index')
             ->with('success', 'Persona registrada exitosamente');
     }
 
-    /**
-     * Detalle (incluye User)
-     */
     public function show(Persona $persona)
     {
         $persona->load([
@@ -162,9 +169,6 @@ class PersonaController extends Controller
         ]);
     }
 
-    /**
-     * Edición
-     */
     public function edit(Persona $persona)
     {
         $persona->load('distrito.provincia.departamento');
@@ -192,15 +196,12 @@ class PersonaController extends Controller
                     ['value' => 'M', 'text' => 'Masculino'],
                     ['value' => 'F', 'text' => 'Femenino'],
                 ],
-                'discapacidads' => Discapacidad::orderBy('id')  // ← CAMBIO AQUÍ
+                'discapacidads' => Discapacidad::orderBy('id')
                     ->get(['id', 'nombre_discapacidad as text']),
             ],
         ]);
     }
 
-    /**
-     * Actualizar
-     */
     public function update(Request $request, Persona $persona)
     {
         $validated = $request->validate([
@@ -221,7 +222,7 @@ class PersonaController extends Controller
             ],
             'ubigeo_com'      => 'required|exists:distritos,ubigeo_com',
             'sexo'            => 'required|in:M,F',
-            'discapacidad_id' => 'nullable|exists:discapacidads,id', // corregido
+            'discapacidad_id' => 'nullable|exists:discapacidads,id',
             'fecha_nac'       => 'required|date|before_or_equal:today',
             'direccion'       => 'nullable|string|max:255',
             'telefono'        => 'nullable|string|max:20',
@@ -233,9 +234,6 @@ class PersonaController extends Controller
             ->with('success', 'Persona actualizada exitosamente');
     }
 
-    /**
-     * Eliminar
-     */
     public function destroy(Persona $persona)
     {
         $persona->delete();
@@ -244,9 +242,6 @@ class PersonaController extends Controller
             ->with('success', 'Persona eliminada exitosamente');
     }
 
-    /**
-     * APIs UBIGEO
-     */
     public function getProvincias($ubigeoDep)
     {
         return response()->json(
@@ -265,9 +260,6 @@ class PersonaController extends Controller
         );
     }
 
-    /**
-     * (Opcional) Entregar todos los catálogos de UBIGEO de una sola vez
-     */
     public function getUbigeoData()
     {
         return response()->json([
@@ -277,17 +269,11 @@ class PersonaController extends Controller
         ]);
     }
 
-    /**
-     * Confirmación de borrado (si tienes la vista)
-     */
     public function confirmDelete(Persona $persona)
     {
         return Inertia::render('Persona/ConfirmDelete', ['persona' => $persona]);
     }
 
-    /**
-     * Página que muestra la relación Persona → User
-     */
     public function usuarios(Persona $persona)
     {
         $persona->load('user:id,name,email,persona_id');
@@ -299,7 +285,7 @@ class PersonaController extends Controller
                 'pri_ape' => $persona->pri_ape,
                 'seg_ape' => $persona->seg_ape,
             ],
-            'usuario' => $persona->user, // null si aún no tiene
+            'usuario' => $persona->user,
         ]);
     }
 }
