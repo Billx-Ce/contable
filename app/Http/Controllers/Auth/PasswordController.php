@@ -3,27 +3,27 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Facades\Hash;
 
 class PasswordController extends Controller
 {
     /**
-     * Update the user's password.
+     * Actualiza la contraseña del usuario AUTENTICADO.
      */
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request)
     {
         $validated = $request->validate([
-            'current_password' => ['required', 'current_password'],
-            'password' => ['required', Password::defaults(), 'confirmed'],
+            'current_password' => ['required', 'current_password'], // verifica contra el usuario logueado
+            'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
-        $request->user()->update([
+        // Solo toca al usuario autenticado
+        $request->user()->forceFill([
             'password' => Hash::make($validated['password']),
-        ]);
+        ])->save();
 
-        return back();
+        return back()->with('status', 'password-updated'); // opcional: para mostrar mensaje en UI
     }
 }

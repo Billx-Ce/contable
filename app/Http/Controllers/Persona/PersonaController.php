@@ -73,10 +73,24 @@ class PersonaController extends Controller
                 'distrito'     => $d->nombre,
             ]);
 
+        $u = auth()->user();
+
+        $can = [
+            // para UI (botones)
+            'create' => $u?->hasPermission('personas.crear') ?? false,
+            'edit'   => $u?->hasPermission('personas.editar') ?? false,
+            'delete' => $u?->hasPermission('personas.eliminar') ?? false,
+
+            // ojo: este 'view' lo seguimos usando SOLO para ver la tabla (listado),
+            // no para mostrar el botón "ver" de detalle.
+            'view'   => $u?->hasPermission('personas.view') ?? false,
+        ];
+
         return Inertia::render('Persona/Index', [
             'personas' => $personas,
             'filters'  => $request->only(['search', 'tipo_doc', 'ubigeo_id']),
             'ubigeos'  => $ubigeos,
+            'can'      => $can,
         ]);
     }
 
@@ -124,30 +138,28 @@ class PersonaController extends Controller
             'fecha_nac'       => 'required|date|before_or_equal:today',
             'direccion'       => 'nullable|string|max:255',
             'telefono'        => 'nullable|string|max:9',
+            'email'           => 'required|email|unique:users', // ➕ nuevo
+            'password'        => 'required|min:6',              // ➕ nuevo
         ]);
+
 
         // 1) Crear PERSONA
         $persona = Persona::create($validated);
 
-        // 2) ➕ Crear USUARIO automático si hay DNI
-        if ($persona->tipo_doc === 'DNI' && !empty($persona->num_doc)) {
-            $base = "{$persona->num_doc}@gmail.com";
-            $email = $base;
-            $i = 1;
-            // Evitar choque si ya existe ese email
-            while (User::where('email', $email)->exists()) {
-                $email = "{$persona->num_doc}+{$i}@gmail.com";
-                $i++;
-            }
+        // 2) Crear USUARIO con email y password proporcionados
+        $nombreCompleto = trim("{$persona->nombre} {$persona->pri_ape} {$persona->seg_ape}");
 
-            $nombreCompleto = trim("{$persona->nombre} {$persona->pri_ape} {$persona->seg_ape}");
+        $user = User::create([
+            'name'     => $nombreCompleto ?: $persona->num_doc,
+            'email'    => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'persona_id' => $persona->id, // ← ASOCIA DESDE AQUÍ
+        ]);
 
-            $persona->user()->create([
-                'name'     => $nombreCompleto ?: $persona->num_doc,
-                'email'    => $email,
-                'password' => Hash::make($persona->num_doc), // contraseña = DNI
-            ]);
-        }
+
+
+        // Vincular usuario a la persona
+        $persona->update(['user_id' => $user->id]);
 
         return redirect()->route('personas.index')
             ->with('success', 'Persona registrada exitosamente');

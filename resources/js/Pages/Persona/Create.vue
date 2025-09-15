@@ -29,7 +29,9 @@ const form = useForm({
   discapacidad_id: '',
   fecha_nac: '',
   direccion: '',
-  telefono: '',     // <- al backend se envían SOLO 9 dígitos
+  telefono: '', 
+  email: '',      // ➕ nuevo
+  password: '',   // ➕ nuevo    // <- al backend se envían SOLO 9 dígitos
 })
 
 /* =========================
@@ -396,6 +398,29 @@ const submit = () => {
                     <p v-if="telefonoError" class="mt-1 text-sm text-red-600">{{ telefonoError }}</p>
                     <p v-else-if="form.errors.telefono" class="mt-1 text-sm text-red-600">{{ form.errors.telefono }}</p>
                     <p v-else class="mt-1 text-xs text-gray-500">Ingresa solo 9 dígitos (Ej: 987654321)</p>
+                  </div>
+                  <!-- Email -->
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <input
+                      v-model="form.email"
+                      type="email"
+                      class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                    <p v-if="form.errors.email" class="mt-1 text-sm text-red-600">{{ form.errors.email }}</p>
+                  </div>
+
+                  <!-- Contraseña -->
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
+                    <input
+                      v-model="form.password"
+                      type="password"
+                      class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                    <p v-if="form.errors.password" class="mt-1 text-sm text-red-600">{{ form.errors.password }}</p>
                   </div>
                 </div>
               </div>

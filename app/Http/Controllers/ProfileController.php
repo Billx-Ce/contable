@@ -14,7 +14,7 @@ use Inertia\Response;
 class ProfileController extends Controller
 {
     /**
-     * Display the user's profile form.
+     * Muestra el formulario de perfil.
      */
     public function edit(Request $request): Response
     {
@@ -25,10 +25,11 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update the user's profile information.
+     * Actualiza nombre y correo del usuario autenticado.
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
+        // SIEMPRE se usa el usuario autenticado: no hay forma de editar a otro
         $request->user()->fill($request->validated());
 
         if ($request->user()->isDirty('email')) {
@@ -37,11 +38,12 @@ class ProfileController extends Controller
 
         $request->user()->save();
 
-        return Redirect::route('profile.edit');
+        // agregado: bandera para mostrar mensaje de éxito en la UI
+        return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }
 
     /**
-     * Delete the user's account.
+     * Elimina la cuenta propia (opcional).
      */
     public function destroy(Request $request): RedirectResponse
     {

@@ -1,12 +1,10 @@
 <!-- resources/js/Pages/Persona/Index.vue -->
 <script setup>
-import { Link, router } from '@inertiajs/vue3'
+import { Link, router, usePage } from '@inertiajs/vue3'
 import { ref, watch, computed } from 'vue'
 import AppLayout from '@/Layouts/AuthenticatedLayout.vue'
 import Pagination from '@/Components/Pagination.vue'
 import Swal from 'sweetalert2'
-
-// Heroicons (solid)
 import {
   PlusIcon,
   XMarkIcon,
@@ -19,16 +17,37 @@ import {
 const props = defineProps({
   personas: { type: Object, required: true },
   filters:  { type: Object, default: () => ({}) },
-  ubigeos:  { type: Array,  default: () => [] }
+  ubigeos:  { type: Array,  default: () => [] },
+  // 👇 nuevo: si tu controlador ya envía estos permisos por página
+  can:      { type: Object, default: () => ({}) },
 })
 
-// Filtros de búsqueda
+// fallback por si aún no mandas props.can desde el controlador:
+// tratar de leer permisos globales compartidos en $page.props.auth.can
+const page = usePage()
+const globalCan = computed(() => page?.props?.auth?.can ?? [])
+const asBool = (perm) => {
+  if (props.can && typeof props.can[perm] === 'boolean') return props.can[perm]
+  // fallback: cuando sólo tenemos lista de strings
+  return Array.isArray(globalCan.value) && globalCan.value.includes(`personas.${perm}`)
+}
+
+// booleans para la UI
+const canCreate = computed(() => asBool('crear'))
+const canEdit   = computed(() => asBool('editar'))
+const canDelete = computed(() => asBool('eliminar'))
+//const canView   = computed(() => asBool('ver'))
+// mostramos columna Acciones sólo si hay algo útil que mostrar
+const showActionsCol = computed(() => canEdit.value || canDelete.value)
+// si quieres ocultar también el "ver" a cliente, lo ligamos a que tenga edit/delete:
+const showViewIcon   = computed(() => canEdit.value || canDelete.value)
+
+// ---------------- filtros / búsqueda ----------------
 const filters = ref({
   search:    props.filters.search    || '',
   tipo_doc:  props.filters.tipo_doc  || ''
 })
 
-// Modal
 const showModal = ref(false)
 const selectedPerson = ref(null)
 
@@ -46,7 +65,6 @@ const openModal = (persona) => {
 }
 const closeModal = () => { showModal.value = false; selectedPerson.value = null }
 
-// Buscar
 const search = () => {
   router.get(route('personas.index'), filters.value, {
     preserveState: true,
@@ -55,8 +73,8 @@ const search = () => {
   })
 }
 
-// Eliminar
 const confirmDelete = (persona) => {
+  if (!canDelete.value) return
   const nombre = persona?.nombre_completo ?? 'esta persona'
 
   Swal.fire({
@@ -93,12 +111,10 @@ const confirmDelete = (persona) => {
   })
 }
 
-// Limpiar filtros
 const clearFilters = () => {
   filters.value = { search: '', tipo_doc: '', ubigeo_id: '' }
 }
 
-// Debounce
 let searchTimeout = null
 watch(filters, () => {
   if (searchTimeout) clearTimeout(searchTimeout)
@@ -129,7 +145,10 @@ const hasActiveFilters = computed(() =>
                 Total: {{ personas.total || 0 }} persona(s)
               </p>
             </div>
+
+            <!-- 👇 botón NUEVA PERSONA solo si tiene personas.crear -->
             <Link
+              v-if="canCreate"
               :href="route('personas.create')"
               class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md shadow hover:bg-blue-700 transition"
             >
@@ -186,7 +205,14 @@ const hasActiveFilters = computed(() =>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacto</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+
+                  <!-- 👇 columna Acciones solo si hay algo que mostrar -->
+                  <th
+                    v-if="showActionsCol"
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Acciones
+                  </th>
                 </tr>
               </thead>
 
@@ -235,9 +261,11 @@ const hasActiveFilters = computed(() =>
                   </td>
 
                   <!-- Acciones -->
-                  <td class="px-6 py-4">
+                  <td v-if="showActionsCol" class="px-6 py-4">
                     <div class="flex items-center gap-2">
+                      <!-- "Ver": sólo para quienes tengan edit/delete -->
                       <button
+                        v-if="showViewIcon"
                         @click="openModal(persona)"
                         class="p-2 text-green-600 hover:text-white hover:bg-green-600 rounded-full transition"
                         title="Ver"
@@ -246,7 +274,9 @@ const hasActiveFilters = computed(() =>
                         <EyeIcon class="w-5 h-5" />
                       </button>
 
+                      <!-- Editar -->
                       <Link
+                        v-if="canEdit"
                         :href="route('personas.edit', persona.id)"
                         class="p-2 text-blue-600 hover:text-white hover:bg-blue-600 rounded-full transition"
                         title="Editar"
@@ -255,7 +285,9 @@ const hasActiveFilters = computed(() =>
                         <PencilSquareIcon class="w-5 h-5" />
                       </Link>
 
+                      <!-- Eliminar -->
                       <button
+                        v-if="canDelete"
                         @click="confirmDelete(persona)"
                         class="p-2 text-red-600 hover:text-white hover:bg-red-600 rounded-full transition"
                         title="Eliminar"
@@ -268,7 +300,7 @@ const hasActiveFilters = computed(() =>
                 </tr>
 
                 <tr v-if="personas.data.length === 0">
-                  <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                  <td :colspan="showActionsCol ? 5 : 4" class="px-6 py-8 text-center text-gray-500">
                     No se encontraron personas
                   </td>
                 </tr>
@@ -300,7 +332,6 @@ const hasActiveFilters = computed(() =>
       >
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <div class="p-6">
-            <!-- Header -->
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-xl font-bold text-gray-900">Detalles de Persona</h3>
               <button @click="closeModal" class="text-gray-500 hover:text-gray-700" aria-label="Cerrar">
@@ -308,9 +339,7 @@ const hasActiveFilters = computed(() =>
               </button>
             </div>
 
-            <!-- Contenido -->
             <div class="space-y-4" v-if="selectedPerson">
-              <!-- Datos personales -->
               <div>
                 <h4 class="text-lg font-semibold text-gray-800 mb-2">Datos Personales</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -335,7 +364,6 @@ const hasActiveFilters = computed(() =>
                 </div>
               </div>
 
-              <!-- Ubicación -->
               <div>
                 <h4 class="text-lg font-semibold text-gray-800 mb-2">Ubicación</h4>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -358,7 +386,6 @@ const hasActiveFilters = computed(() =>
                 </div>
               </div>
 
-              <!-- Contacto -->
               <div>
                 <h4 class="text-lg font-semibold text-gray-800 mb-2">Contacto</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -369,7 +396,6 @@ const hasActiveFilters = computed(() =>
                 </div>
               </div>
 
-              <!-- Discapacidad -->
               <div>
                 <h4 class="text-lg font-semibold text-gray-800 mb-2">Discapacidad</h4>
                 <p class="font-medium">
@@ -378,7 +404,6 @@ const hasActiveFilters = computed(() =>
               </div>
             </div>
 
-            <!-- Botón cerrar -->
             <div class="mt-6 flex justify-end">
               <button
                 @click="closeModal"
