@@ -5,6 +5,8 @@ import { ref, watch, computed } from 'vue'
 import AppLayout from '@/Layouts/AuthenticatedLayout.vue'
 import Pagination from '@/Components/Pagination.vue'
 import Swal from 'sweetalert2'
+
+// Heroicons (solid)
 import {
   PlusIcon,
   XMarkIcon,
@@ -17,37 +19,32 @@ import {
 const props = defineProps({
   personas: { type: Object, required: true },
   filters:  { type: Object, default: () => ({}) },
-  ubigeos:  { type: Array,  default: () => [] },
-  // 👇 nuevo: si tu controlador ya envía estos permisos por página
-  can:      { type: Object, default: () => ({}) },
+  ubigeos:  { type: Array,  default: () => [] }
 })
 
-// fallback por si aún no mandas props.can desde el controlador:
-// tratar de leer permisos globales compartidos en $page.props.auth.can
+/* ========= permisos desde Inertia ========= */
 const page = usePage()
-const globalCan = computed(() => page?.props?.auth?.can ?? [])
-const asBool = (perm) => {
-  if (props.can && typeof props.can[perm] === 'boolean') return props.can[perm]
-  // fallback: cuando sólo tenemos lista de strings
-  return Array.isArray(globalCan.value) && globalCan.value.includes(`personas.${perm}`)
+const canList = computed(() => page?.props?.auth?.can ?? [])
+
+/** Normaliza un nombre de permiso a ambas variantes ES/EN y
+ *  devuelve true si el usuario tiene alguno de ellos.
+ *  Ej.: has('personas.create') o has('personas.crear')
+ */
+const has = (...perms) => {
+  const alt = (p) =>
+    p.replace('.create', '.crear')
+     .replace('.edit', '.editar')
+     .replace('.delete', '.eliminar')
+  return perms.some(p => canList.value.includes(p) || canList.value.includes(alt(p)))
 }
 
-// booleans para la UI
-const canCreate = computed(() => asBool('crear'))
-const canEdit   = computed(() => asBool('editar'))
-const canDelete = computed(() => asBool('eliminar'))
-//const canView   = computed(() => asBool('ver'))
-// mostramos columna Acciones sólo si hay algo útil que mostrar
-const showActionsCol = computed(() => canEdit.value || canDelete.value)
-// si quieres ocultar también el "ver" a cliente, lo ligamos a que tenga edit/delete:
-const showViewIcon   = computed(() => canEdit.value || canDelete.value)
-
-// ---------------- filtros / búsqueda ----------------
+/* ========= filtros de búsqueda ========= */
 const filters = ref({
   search:    props.filters.search    || '',
   tipo_doc:  props.filters.tipo_doc  || ''
 })
 
+/* ========= modal ========= */
 const showModal = ref(false)
 const selectedPerson = ref(null)
 
@@ -65,6 +62,7 @@ const openModal = (persona) => {
 }
 const closeModal = () => { showModal.value = false; selectedPerson.value = null }
 
+/* ========= acciones ========= */
 const search = () => {
   router.get(route('personas.index'), filters.value, {
     preserveState: true,
@@ -74,9 +72,7 @@ const search = () => {
 }
 
 const confirmDelete = (persona) => {
-  if (!canDelete.value) return
   const nombre = persona?.nombre_completo ?? 'esta persona'
-
   Swal.fire({
     title: '¿Eliminar a ' + nombre + '?',
     text: 'Esta acción no se puede deshacer.',
@@ -87,30 +83,20 @@ const confirmDelete = (persona) => {
     reverseButtons: true,
   }).then((result) => {
     if (!result.isConfirmed) return
-
     router.delete(route('personas.destroy', persona.id), {
       preserveScroll: true,
       onStart: () => Swal.showLoading(),
       onSuccess: () => {
-        Swal.fire({
-          icon: 'success',
-          title: 'Eliminado',
-          text: 'La persona fue eliminada correctamente.',
-          timer: 1500,
-          showConfirmButton: false,
-        })
+        Swal.fire({ icon: 'success', title: 'Eliminado', text: 'La persona fue eliminada.', timer: 1500, showConfirmButton: false })
       },
       onError: () => {
-        Swal.fire({
-          icon: 'error',
-          title: 'No se pudo eliminar',
-          text: 'Revisa dependencias o permisos.',
-        })
+        Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: 'Revisa dependencias o permisos.' })
       },
     })
   })
 }
 
+/* ========= limpiar filtros + debounce ========= */
 const clearFilters = () => {
   filters.value = { search: '', tipo_doc: '', ubigeo_id: '' }
 }
@@ -124,29 +110,39 @@ watch(filters, () => {
 const hasActiveFilters = computed(() =>
   !!(filters.value.search || filters.value.tipo_doc || filters.value.ubigeo_id)
 )
+
+/* ========= visibilidad por permisos ========= */
+const canCreate = computed(() => has('personas.create', 'personas.crear'))
+const canView   = computed(() => has('personas.view'))          // “view” lo mantuviste en inglés
+const canEdit   = computed(() => has('personas.edit', 'personas.editar'))
+const canDelete = computed(() => has('personas.delete', 'personas.eliminar'))
+
+// mostrar encabezado/columna “Acciones” solo si hay algo que mostrar
+const showActionsColumn = computed(() => canView.value || canEdit.value || canDelete.value)
 </script>
 
 <template>
   <AppLayout title="Listado de Personas">
     <template #header>
       <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-        Gestión de Personas
+        Gestión de personas
       </h2>
     </template>
 
     <div class="py-12">
       <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
         <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg p-6">
+
           <!-- Encabezado -->
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <div>
-              <h1 class="text-2xl font-bold text-gray-900">Listado de Personas</h1>
+              <h1 class="text-2xl font-bold text-gray-900">Listado de personas</h1>
               <p class="text-sm text-gray-600 mt-1">
                 Total: {{ personas.total || 0 }} persona(s)
               </p>
             </div>
 
-            <!-- 👇 botón NUEVA PERSONA solo si tiene personas.crear -->
+            <!-- NUEVA PERSONA (solo si tiene personas.create/crear) -->
             <Link
               v-if="canCreate"
               :href="route('personas.create')"
@@ -171,7 +167,7 @@ const hasActiveFilters = computed(() =>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Tipo Documento</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de documento</label>
                 <select
                   v-model="filters.tipo_doc"
                   class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
@@ -201,14 +197,20 @@ const hasActiveFilters = computed(() =>
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre y Edad</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacto</th>
-
-                  <!-- 👇 columna Acciones solo si hay algo que mostrar -->
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nombre y edad
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Documento
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ubicación
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Contacto
+                  </th>
                   <th
-                    v-if="showActionsCol"
+                    v-if="showActionsColumn"
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
                     Acciones
@@ -260,12 +262,12 @@ const hasActiveFilters = computed(() =>
                     </div>
                   </td>
 
-                  <!-- Acciones -->
-                  <td v-if="showActionsCol" class="px-6 py-4">
+                  <!-- Acciones (según permiso) -->
+                  <td v-if="showActionsColumn" class="px-6 py-4">
                     <div class="flex items-center gap-2">
-                      <!-- "Ver": sólo para quienes tengan edit/delete -->
+                      <!-- Ver -->
                       <button
-                        v-if="showViewIcon"
+                        v-if="canView"
                         @click="openModal(persona)"
                         class="p-2 text-green-600 hover:text-white hover:bg-green-600 rounded-full transition"
                         title="Ver"
@@ -300,7 +302,7 @@ const hasActiveFilters = computed(() =>
                 </tr>
 
                 <tr v-if="personas.data.length === 0">
-                  <td :colspan="showActionsCol ? 5 : 4" class="px-6 py-8 text-center text-gray-500">
+                  <td :colspan="showActionsColumn ? 5 : 4" class="px-6 py-8 text-center text-gray-500">
                     No se encontraron personas
                   </td>
                 </tr>
@@ -321,7 +323,7 @@ const hasActiveFilters = computed(() =>
       </div>
     </div>
 
-    <!-- Modal Detalle -->
+    <!-- Modal Detalle (para botón Ver) -->
     <teleport to="body">
       <div
         v-if="showModal"
@@ -341,7 +343,7 @@ const hasActiveFilters = computed(() =>
 
             <div class="space-y-4" v-if="selectedPerson">
               <div>
-                <h4 class="text-lg font-semibold text-gray-800 mb-2">Datos Personales</h4>
+                <h4 class="text-lg font-semibold text-gray-800 mb-2">Datos personales</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p class="text-sm text-gray-500">Nombre completo</p>
