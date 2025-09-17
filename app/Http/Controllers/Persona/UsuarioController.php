@@ -62,6 +62,11 @@ class UsuarioController extends Controller
         $data['password'] = Hash::make($data['password']);
         $user = User::create($data);
 
+        $clienteId = Role::where('nombre', 'cliente')->value('id');
+        if ($clienteId) {
+            $user->roles()->syncWithoutDetaching([$clienteId]);
+        }
+
         return response()->json($user->load('persona'), 201);
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Persona;
 
 use App\Http\Controllers\Controller;
 use App\Models\Persona;
+use App\Models\Role;
 use App\Models\Departamento;
 use App\Models\Provincia;
 use App\Models\Distrito;
@@ -137,9 +138,9 @@ class PersonaController extends Controller
             'discapacidad_id' => 'nullable|exists:discapacidads,id',
             'fecha_nac'       => 'required|date|before_or_equal:today',
             'direccion'       => 'nullable|string|max:255',
-            'telefono'        => 'nullable|string|max:9',
-            'email'           => 'required|email|unique:users', // ➕ nuevo
-            'password'        => 'required|min:6',              // ➕ nuevo
+            'telefono'        => ['nullable', 'digits:9'],
+            'email'           => 'required|email|unique:users', 
+            'password'        => 'required|min:6',             
         ]);
 
 
@@ -156,6 +157,11 @@ class PersonaController extends Controller
             'persona_id' => $persona->id, // ← ASOCIA DESDE AQUÍ
         ]);
 
+        // Asignar rol "cliente" automáticamente
+    $clienteId = Role::where('nombre', 'cliente')->value('id');
+    if ($clienteId) {
+        $user->roles()->syncWithoutDetaching([$clienteId]);
+    }
 
 
         // Vincular usuario a la persona
@@ -237,7 +243,7 @@ class PersonaController extends Controller
             'discapacidad_id' => 'nullable|exists:discapacidads,id',
             'fecha_nac'       => 'required|date|before_or_equal:today',
             'direccion'       => 'nullable|string|max:255',
-            'telefono'        => 'nullable|string|max:20',
+            'telefono'        => ['nullable', 'digits:9'],
         ]);
 
         $persona->update($validated);

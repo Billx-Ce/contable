@@ -6,6 +6,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use App\Models\Role;
+
 
 class User extends Authenticatable
 {
@@ -72,6 +74,24 @@ class User extends Authenticatable
         return $this->roles()->whereHas('permissions', fn($q) =>
             $q->where('nombre', $permNombre)
         )->exists();
+    }
+
+    //usuario nuevo con rol de cliente
+    protected static function booted(): void
+    {
+    static::created(function (User $user) {
+        // Si ya tiene roles (ej. el superadmin lo creó con alguno), no le ponemos cliente.
+        if ($user->roles()->exists()) {
+            return;
+        }
+
+        // Buscar el rol "cliente"
+        $clienteId = Role::where('nombre', 'cliente')->value('id');
+
+        if ($clienteId) {
+            $user->roles()->syncWithoutDetaching([$clienteId]);
+        }
+    });
     }
 
     // ==================== MÉTODOS ADICIONALES ====================

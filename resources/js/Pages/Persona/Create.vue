@@ -55,10 +55,9 @@ const telefonoModel = computed({
   set(v) {
     const digits = (v || '').replace(/\D/g, '').slice(0, 9)
     telefonoDigits.value = digits
-    form.telefono = digits
-    telefonoError.value = digits && digits.length !== 9
-      ? 'El teléfono debe tener exactamente 9 dígitos'
-      : ''
+    e.target.value = clean           // lo que ves en el input
+    form.telefono = clean            // lo que se envía al servidor
+    telefonoError.value = clean && clean.length !== 9 ? 'El teléfono debe tener exactamente 9 dígitos' : ''
   }
 })
 
@@ -382,22 +381,22 @@ const submit = () => {
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
                     <input
-                      v-model="telefonoModel"
+                      v-model="form.telefono"
                       type="tel"
                       inputmode="numeric"
-                      pattern="\d{9}"
+                      pattern="\d*"
+                      maxlength="9"
+                      @input="onTelInput"
                       autocomplete="off"
                       placeholder="9 dígitos (+51)"
-                      @keydown.enter.prevent
-                      :class="{
-                        'w-full px-4 py-2 border rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500': true,
-                        'border-red-300 focus:border-red-500 focus:ring-red-500': telefonoError || form.errors.telefono,
-                        'border-gray-300': !telefonoError && !form.errors.telefono
-                      }"
+                      :class="[
+                        'w-full px-4 py-2 border rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500',
+                        telefonoError || form.errors.telefono ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
+                      ]"
                     />
                     <p v-if="telefonoError" class="mt-1 text-sm text-red-600">{{ telefonoError }}</p>
                     <p v-else-if="form.errors.telefono" class="mt-1 text-sm text-red-600">{{ form.errors.telefono }}</p>
-                    <p v-else class="mt-1 text-xs text-gray-500">Ingresa solo 9 dígitos (Ej: 987654321)</p>
+                    <p class="mt-1 text-xs text-gray-500">Ingresa solo 9 dígitos (Ej: 987654321)</p>
                   </div>
                   <!-- Email -->
                   <div>
